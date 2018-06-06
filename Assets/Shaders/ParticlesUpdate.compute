@@ -1,0 +1,88 @@
+﻿#pragma kernel CSMain
+#include "Common.cginc"
+#define PI 3.14159265359
+
+RWStructuredBuffer<Particle> particles;
+
+Texture3D<float4> velocity_field;
+SamplerState sampler_velocity_field;
+
+float lifetime;
+float speed;
+float time;
+float dt;
+
+float velocity_smoothing; 
+float color_smoothing;
+
+float field_power;
+float orbit_motion;
+float field_motion;
+
+float spawn_radius_min;
+float spawn_radius_max;
+
+float4 color_min;
+float4 color_max;
+
+float velocity_to_color;
+
+float axis_spread;
+
+float3 random(float3 input)
+{
+	float3 o = (input + float3(1, 1, 1)) * (1 + dt);//) * 123.354;
+	return float3(sin(o.x), sin(o.y), sin(o.z));
+}
+
+float3 spherical_to_cartesian(float radius, float theta, float phi)
+{
+	return float3(
+		radius * sin(theta) * cos(phi),
+		radius * sin(theta) * sin(phi),
+		radius * cos(theta));
+}
+
+[numthreads(32, 1, 1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+	float3 position = particles[id.x].position;
+
+	// field velocity
+	float4 sample_field_velocity = velocity_field.SampleLevel(sampler_velocity_field, position + float3(0.5, 0.5, 0.5), 0);
+	float3 field_velocity = (sample_field_velocity.xyz - float3(0.5, 0.5, 0.5)) * 2.0;
+	//field_velocity *= pow(dot(field_velocity, field_velocity), field_power);
+
+	// orbit velocity
+	float3 axis = particles[id.x].axis;
+	float3 orbit_velocity = normalize(position * (1 - length(position)) + cross(position, axis));
+	
+	// mix field and orbit velocity to get final velocity
+	float3 update_velocity = orbit_velocity * orbit_motion + field_velocity * field_motion;
+
+	// interpolate sampled velocity and particle velocity
+	float3 velocity = lerp(particles[id.x].velocity, update_velocity, dt / max(0.01, velocity_smoothing));
+
+	// move along velocity field
+	position += velocity * (speed * dt);
+
+	// pick a new axis for particle orbital motion
+	float3 rand = particles[id.x].random; // is on unity sphere
+	float3 update_axis = spherical_to_cartesian(1, lerp(0, PI * 0.5, rand.x * axis_spread), lerp(0, 2 * PI, rand.y));
+	float radius = lerp(spawn_radius_min, spawn_radius_max, frac(rand.x + dt * 321654.987));
+
+	// a random position to respawn the particle in case of death
+	float3 rnd_position = normalize(cross(update_axis, position)) * radius;
+
+	// get older, a particle is respawned if it gets too old
+	float age = particles[id.x].age + dt / max(0.001, lifetime);
+	float respawn = step(1.0, age);
+
+	float4 update_color = lerp(color_min, color_max, dot(velocity, velocity) * velocity_to_color);
+
+	particles[id.x].color = lerp(particles[id.x].color, update_color, dt / max(0.01, velocity_smoothing));
+	particles[id.x].age = lerp(age, -frac(rand.x * dt * 382746.8374), respawn); // use dt to add an element of randomness to age
+	particles[id.x].axis = lerp(axis, update_axis, respawn);
+	particles[id.x].position = lerp(position, rnd_position, respawn);
+	particles[id.x].velocity = lerp(velocity, float3(0, 0, 0), respawn);
+}
