@@ -9,7 +9,7 @@
 		Pass
 		{
 			ZWrite Off
-			Blend SrcAlpha One // Traditional transparency
+			Blend SrcAlpha One
 
 			CGPROGRAM
 			#pragma vertex vert
@@ -19,7 +19,7 @@
 			#include "Common.cginc"
 
 			StructuredBuffer<Particle> particles;
-			
+
 			uniform float4x4 _LocalToWorldMatrix;
 			uniform	sampler2D _MainTex;
 			uniform float _SizeMin;
@@ -48,7 +48,7 @@
 				float2 smooth : TEXCOORD2;
 			};
 
-			// DX11 vertex shader these 2 parameters come from the draw call: "1" and "particleCount", 
+			// DX11 vertex shader these 2 parameters come from the draw call: "1" and "particleCount",
 			// SV_VertexID: "1" is the number of vertex to draw per particle, we could easily make quad or sphere particles with this.
 			// SV_InstanceID: "particleCount", number of particles...
 			v2g vert (uint id : SV_VertexID, uint inst : SV_InstanceID)
@@ -57,7 +57,7 @@
 				// we modulate size based on age
 				float ageToSize = smoothstep(0, 0.1, max(0, particles[id].age)) * smoothstep(0, 0.1, 1 - max(0, particles[id].age));
 				float normSize = 1.0 / (1.0 + exp(-(_SizeContrast * 24.0 * (particles[id].random.x - 0.5) + lerp(-10, 10, _SizeDistribution))));
-				
+
 				v2g output;
 				output.vertex = worldPosition;
 				output.color = particles[id].color;
@@ -111,7 +111,7 @@
 				output.smooth = input[0].smooth;
 				OutputStream.Append(output);
 			}
-			
+
 			fixed4 frag (g2f i) : SV_Target
 			{
 				return smoothstep(i.smooth.x, i.smooth.y, tex2D(_MainTex, i.uv)) * i.color;
